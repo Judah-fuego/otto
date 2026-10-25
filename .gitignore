@@ -9,6 +9,8 @@ __pycache__/
 # Telemetry, ephemeris, the live alert queue, and trained weights stay local.
 data/
 queue/alerts.json
+queue/status.json
+queue/*.tmp
 queue/*.db
 queue/*.sqlite
 *.pt

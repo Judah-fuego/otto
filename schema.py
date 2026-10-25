@@ -76,7 +76,6 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
     "A-1",
     "T-1",
     "S-1",
-    "F-1",
     "E-1",
     "G-1",
     "R-1",

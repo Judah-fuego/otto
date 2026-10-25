@@ -1,0 +1,4 @@
+run_id,chan_id,true_positives,false_positives,false_negatives,tp_sequences,fp_sequences,anom_scores,normalized_pred_error
+2026-10-25_15.30.28,P-1,0,0,3,[],[],[],0.09017959272355275
+2026-10-25_15.30.28,A-1,0,0,1,[],[],[],0.002290677501506623
+2026-10-25_15.30.28,T-1,1,1,1,"[[2560, 2979]]","[[6620, 6759]]","[{'start_idx': 2310, 'end_idx': 2379, 'score': 1.6666707950615887}, {'start_idx': 2380, 'end_idx': 2449, 'score': 2.1232506780936458}, {'start_idx': 2450, 'end_idx': 2519, 'score': 2.3516702939168743}, {'start_idx': 2520, 'end_idx': 2589, 'score': 2.678580015226216}, {'start_idx': 2590, 'end_idx': 2659, 'score': 2.898294971604361}, {'start_idx': 2660, 'end_idx': 2729, 'score': 3.019081961291881}, {'start_idx': 6370, 'end_idx': 6439, 'score': 3.243504494041835}, {'start_idx': 6440, 'end_idx': 6509, 'score': 2.396328275294983}]",0.0533390398544502
