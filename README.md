@@ -23,6 +23,8 @@ bash download_data.sh
 python schema.py
 ```
 
+Person B starts the crew interface with `python -m app` (Grok Voice at http://127.0.0.1:8765). Text fallback: `python -m app.chat`. Check the calculator with `python -m voyage`.
+
 `download_data.sh` fills `data/` (gitignored):
 
 - `data/smap/labeled_anomalies.csv` — NASA labels

@@ -1,5 +1,12 @@
-"""Person B. Grok chat. Tools: voyage_calculate, safemode_status, diagnose(alert_id).
+"""Person B. Grok Voice copilot, voyage tool, diagnosis, and the authority gate."""
 
-Read alerts from schema.MOCK_ALERTS until safemode/ writes schema.ALERT_QUEUE.
-Gate results use schema.Authority.
-"""
+from app.gate import gate
+from app.tools import dispatch_tool, tool_diagnose, tool_safemode_status, tool_voyage_calculate
+
+__all__ = [
+    "dispatch_tool",
+    "gate",
+    "tool_diagnose",
+    "tool_safemode_status",
+    "tool_voyage_calculate",
+]
