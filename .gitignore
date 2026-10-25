@@ -6,8 +6,11 @@ __pycache__/
 .DS_Store
 .streamlit/secrets.toml
 
-# Telemetry, TLEs, and trained weights stay local. Both people run download_data.sh.
+# Telemetry, ephemeris, the live alert queue, and trained weights stay local.
 data/
+queue/alerts.json
+queue/*.db
+queue/*.sqlite
 *.pt
 *.pth
 *.ckpt

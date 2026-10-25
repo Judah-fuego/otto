@@ -1,18 +1,18 @@
 [
   {
-    "event_id": "rw-blackout",
+    "alert_id": "rw-backup",
     "time": "2026-10-25T18:12:00Z",
     "channel": "A-1",
     "subsystem": "attitude_control",
     "confidence": 0.93,
-    "ground_contact": false
+    "values": [-0.12, -0.11, -0.13, -0.10, 0.22, 0.48, 0.71, 0.84]
   },
   {
-    "event_id": "cabin-leak",
+    "alert_id": "cabin-leak",
     "time": "2026-10-25T18:18:00Z",
     "channel": "F-1",
     "subsystem": "life_support",
     "confidence": 0.71,
-    "ground_contact": false
+    "values": [0.05, 0.04, 0.06, 0.03, -0.08, -0.21, -0.37, -0.52]
   }
 ]

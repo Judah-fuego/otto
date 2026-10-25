@@ -1,4 +1,5 @@
-"""Person B. Guide chat: evidence, alternatives, consequences, approve and reject.
+"""Person B. Grok chat. Tools: voyage_calculate, safemode_status, diagnose(alert_id).
 
-Read events and the gate's Authority value. Do not import training code from ml/.
+Read alerts from schema.MOCK_ALERTS until safemode/ writes schema.ALERT_QUEUE.
+Gate results use schema.Authority.
 """
