@@ -10,7 +10,7 @@
   {
     "alert_id": "cabin-leak",
     "time": "2026-10-25T18:18:00Z",
-    "channel": "F-1",
+    "channel": "F-2",
     "subsystem": "life_support",
     "confidence": 0.71,
     "values": [0.05, 0.04, 0.06, 0.03, -0.08, -0.21, -0.37, -0.52]

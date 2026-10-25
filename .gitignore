@@ -10,6 +10,8 @@ __pycache__/
 data/
 queue/alerts.json
 queue/status.json
+queue/decisions.json
+queue/simulated.json
 queue/*.tmp
 queue/*.db
 queue/*.sqlite

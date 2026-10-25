@@ -59,6 +59,11 @@ def from_telemanom(run_id: str | None = None) -> tuple[str, list[Detection]]:
 
     detections = []
     for row in df.to_dict("records"):
+        # ml.ensemble writes seed-agreement confidence per window directly.
+        if isinstance(row.get("confidences"), str):
+            for start, end, confidence in _literal(row["confidences"]):
+                detections.append(Detection(row["chan_id"], int(start), int(end), float(confidence)))
+            continue
         # With labels, anomaly_sequences holds NASA's labels and the predictions are split into tp/fp.
         if "tp_sequences" in row:
             sequences = list(_literal(row["tp_sequences"])) + list(_literal(row["fp_sequences"]))

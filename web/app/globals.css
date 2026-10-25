@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* One accent per authority level. Red means the crew must decide now. */
+@theme {
+  --color-void: #06080b;
+  --color-panel: #0b0f14;
+  --color-raised: #10161d;
+  --color-line: #1a222c;
+  --color-ink: #d7dde4;
+  --color-dim: #8692a1;
+  --color-faint: #4b5563;
+  --color-auto: #4fbf8f;
+  --color-crew: #f0a43a;
+  --color-ground: #6aa5f5;
+  --color-alarm: #ef5b5b;
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+@keyframes heartbeat {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes crew-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgb(240 164 58 / 0.55), 0 0 24px -8px rgb(240 164 58 / 0.35); }
+  50% { box-shadow: 0 0 0 1px rgb(240 164 58 / 0.9), 0 0 32px -6px rgb(240 164 58 / 0.5); }
+}
+
+@keyframes alarm-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgb(239 91 91 / 0.6), 0 0 24px -8px rgb(239 91 91 / 0.4); }
+  50% { box-shadow: 0 0 0 1px rgb(239 91 91 / 1), 0 0 36px -6px rgb(239 91 91 / 0.6); }
+}
+
+@keyframes alarm-flash {
+  0%, 100% { background-color: #d93b3b; }
+  50% { background-color: #9e1f1f; }
+}
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.heartbeat { animation: heartbeat 1.6s ease-in-out infinite; }
+.alarm-glow { animation: alarm-glow 1.4s ease-in-out infinite; }
+.alarm-flash { animation: alarm-flash 1.2s ease-in-out infinite; }
+.ticker-track { width: max-content; animation: ticker 22s linear infinite; }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-flash, .ticker-track { animation: none; }
+}
+.arrive { animation: arrive 260ms ease-out both; }
+.crew-glow { animation: crew-glow 2.4s ease-in-out infinite; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.prose-otto strong { color: var(--color-ink); font-weight: 600; }
+.prose-otto ul { list-style: disc; padding-left: 1.25rem; }
+.prose-otto ol { list-style: decimal; padding-left: 1.25rem; }
+.prose-otto li + li { margin-top: 0.2rem; }
+.prose-otto code { font-family: var(--font-mono); font-size: 0.85em; color: var(--color-dim); }
+
+::selection { background: rgb(106 165 245 / 0.3); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }

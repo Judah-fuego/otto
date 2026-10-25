@@ -76,6 +76,7 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
     "A-1",
     "T-1",
     "S-1",
+    "F-2",
     "E-1",
     "G-1",
     "R-1",
@@ -84,7 +85,21 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
 )
 FALLBACK_CHANNELS: tuple[str, ...] = DEFAULT_CHANNELS[:5]
 
-# voyage_calculate routes. Days are the check values, not a formula.
+# voyage_calculate leaves a 300 km Earth parking orbit, so both origins depart from the same place.
+ORIGINS: tuple[str, ...] = ("leo", "earth")
+DESTINATIONS: tuple[str, ...] = (
+    "moon",
+    "mercury",
+    "venus",
+    "mars",
+    "jupiter",
+    "saturn",
+    "uranus",
+    "neptune",
+    "pluto",
+)
+
+# Travel-time checks for voyage_calculate, in days. Check values, not a formula.
 ROUTES: dict[tuple[str, str], int] = {
     ("leo", "moon"): 5,
     ("earth", "mars"): 259,
@@ -219,9 +234,10 @@ def dump_alerts(alerts: list[Alert], path: Path | str = ALERT_QUEUE) -> None:
 def parse_voyage_request(raw: dict[str, Any]) -> VoyageRequest:
     origin = str(raw["origin"])
     destination = str(raw["destination"])
-    if (origin, destination) not in ROUTES:
-        allowed = ", ".join(f"{a} → {b}" for a, b in ROUTES)
-        raise ValueError(f"Route {origin!r} → {destination!r} is not supported. Use {allowed}")
+    if origin not in ORIGINS:
+        raise ValueError(f"Origin {origin!r} is not supported. Use {', '.join(ORIGINS)}")
+    if destination not in DESTINATIONS:
+        raise ValueError(f"Destination {destination!r} is not supported. Use {', '.join(DESTINATIONS)}")
     mass = float(raw["spacecraft_mass_kg"])
     isp = float(raw["isp_s"])
     crew = int(raw["crew"])

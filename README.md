@@ -52,9 +52,9 @@ The live queue is `schema.ALERT_QUEUE` (`queue/alerts.json`). Person A appends w
 Demo alerts in `mock_alerts.json`:
 
 1. `rw-backup` — reaction wheel on `A-1`, confidence 0.93. Gate should choose `auto` and switch to the backup.
-2. `cabin-leak` — possible cabin leak on `F-1`, confidence 0.71. Gate should choose `ask_crew`.
+2. `cabin-leak` — possible cabin leak on `F-2`, confidence 0.71. Gate should choose `ask_crew`.
 
-Train `schema.DEFAULT_CHANNELS` (10). If you fall behind, use `schema.FALLBACK_CHANNELS` (5). Keep the score charts, the alert showing up in the chat, and the gate.
+Train `schema.DEFAULT_CHANNELS` (10). If you fall behind, use `schema.FALLBACK_CHANNELS` (5). F-2 replaced F-1: F-1's forecast error on normal data is larger than on the anomaly. Keep the score charts, the alert showing up in the chat, and the gate.
 
 ## Voyage tool
 
@@ -62,8 +62,8 @@ Train `schema.DEFAULT_CHANNELS` (10). If you fall behind, use `schema.FALLBACK_C
 
 | Input | Meaning |
 | --- | --- |
-| `origin` | `leo` or `earth` |
-| `destination` | `moon` or `mars` |
+| `origin` | `leo` or `earth`. Both leave a 300 km parking orbit |
+| `destination` | `schema.DESTINATIONS`: `moon`, or any planet from `mercury` to `pluto` |
 | `spacecraft_mass_kg` | Dry mass, no propellant |
 | `isp_s` | Specific impulse, seconds |
 | `crew` | Number of people |
@@ -76,6 +76,18 @@ Train `schema.DEFAULT_CHANNELS` (10). If you fall behind, use `schema.FALLBACK_C
 | `launch_window_utc` | Next window from Skyfield, or `null` if you drop that feature |
 | `oxygen_kg`, `water_kg`, `food_kg` | Totals for the crew for the trip |
 
-Supported routes and the travel-time checks are `schema.ROUTES`: Earth → Mars about 259 days, LEO → Moon about 5 days. Daily rates are `OXYGEN_KG_PER_PERSON_DAY`, `WATER_KG_PER_PERSON_DAY`, and `FOOD_KG_PER_PERSON_DAY`.
+Planets are direct Hohmann transfers around the Sun with no gravity assists, so Neptune is about 31 years. The giants capture into a long ellipse rather than a low circular orbit. The travel-time checks in `schema.ROUTES` still guard the demo routes: Earth → Mars about 259 days, LEO → Moon about 5 days.
+
+## Chat
+
+```bash
+./dev.sh                    # API on :8000 (app/server.py), console on http://localhost:3000 (web/)
+OTTO_ALERTS=mock ./dev.sh   # pin the scripted demo alerts
+streamlit run app/ui.py     # fallback console, same tools and gate
+```
+
+Alerts come from the live queue once it has any, from `mock_alerts.json` until then. Crew decisions and the action log live in `queue/decisions.json`; "reset demo" in the console clears them.
+
+The gate is `app/gate.py`. Code picks `auto`, `ask_crew`, or `escalate`; Grok only explains it. `ask_crew` cards wait for the crew's Approve or Reject. Daily rates are `OXYGEN_KG_PER_PERSON_DAY`, `WATER_KG_PER_PERSON_DAY`, and `FOOD_KG_PER_PERSON_DAY`.
 
 Chat tools: `voyage_calculate(...)`, `safemode_status`, `diagnose(alert_id)`.
