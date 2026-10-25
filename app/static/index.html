@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Otto — crew copilot</title>
+  <style>
+    :root {
+      --bg: #07090d;
+      --panel: #10141c;
+      --ink: #e8eef7;
+      --mute: #8b97a8;
+      --line: #243044;
+      --go: #3ee0a0;
+      --warn: #f0c14b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 15px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #1a2740 0%, var(--bg) 55%);
+      color: var(--ink);
+    }
+    header {
+      padding: 1.25rem 1.5rem 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    h1 { font-size: 1.15rem; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+    .status { color: var(--mute); font-variant-numeric: tabular-nums; }
+    main { max-width: 760px; margin: 0 auto; padding: 0 1.25rem 2rem; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    button, input {
+      font: inherit;
+      color: var(--ink);
+    }
+    button {
+      background: #1c6b4a;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.65rem 1.2rem;
+      cursor: pointer;
+    }
+    button.down { background: #6b2a2a; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    input {
+      flex: 1;
+      background: #0c1016;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.65rem 1rem;
+    }
+    .row { display: flex; gap: 0.6rem; align-items: center; }
+    #log { min-height: 280px; max-height: 55vh; overflow: auto; }
+    .msg { margin: 0.55rem 0; }
+    .msg .who { color: var(--mute); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    .tool { color: var(--warn); font-family: ui-monospace, monospace; font-size: 0.82rem; }
+    .hint { color: var(--mute); margin: 0.4rem 0 0; }
+    .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--mute); display: inline-block; margin-right: 0.4rem; }
+    .dot.on { background: var(--go); box-shadow: 0 0 10px var(--go); }
+    .quick-actions { margin-top: 0.65rem; display: flex; gap: 0.45rem; flex-wrap: wrap; }
+    .chip {
+      background: #141c2b;
+      border: 1px solid var(--line);
+      padding: 0.3rem 0.75rem;
+      font-size: 0.78rem;
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--mute);
+    }
+    .chip:hover {
+      color: var(--ink);
+      border-color: var(--mute);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="dot" id="dot"></span>Otto</h1>
+    <div class="status" id="status">idle</div>
+  </header>
+  <main>
+    <div class="card">
+      <div class="row">
+        <button id="talk">Talk</button>
+        <input id="text" placeholder="Or type: I want to go to Mars" />
+        <button id="send">Send</button>
+      </div>
+      <div class="quick-actions">
+        <button type="button" class="chip" onclick="simulateAlert('rw-backup')">Simulate: rw-backup</button>
+        <button type="button" class="chip" onclick="simulateAlert('cabin-leak')">Simulate: cabin-leak</button>
+        <button type="button" class="chip" onclick="handleQuickText('I want to go to Mars')">Mars Voyage</button>
+        <button type="button" class="chip" onclick="handleQuickText('What is the SafeMode status?')">SafeMode Status</button>
+      </div>
+      <p class="hint">Grok Voice. Tools: voyage_calculate, safemode_status, diagnose. Mic stays on this machine; the API key does not.</p>
+    </div>
+    <div class="card" id="log"></div>
+  </main>
+  <script>
+    const RATE = 24000;
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+    const talkBtn = document.getElementById("talk");
+    const sendBtn = document.getElementById("send");
+    const textEl = document.getElementById("text");
+    const dot = document.getElementById("dot");
+
+    let ws, audioCtx, playAt = 0, capturing = false, processor, source, stream;
+    let pendingCalls = 0, outputsThisTurn = 0, responseOpen = false;
+    let seenAlerts = new Set();
+
+    function setStatus(s) { statusEl.textContent = s; }
+    function line(who, text, cls) {
+      const wrap = document.createElement("div");
+      wrap.className = "msg " + (cls || "");
+      wrap.innerHTML = `<div class="who">${who}</div><div>${text}</div>`;
+      logEl.appendChild(wrap);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function floatTo16(float32) {
+      const out = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out;
+    }
+
+    function resample(input, fromRate, toRate) {
+      if (fromRate === toRate) return input;
+      const ratio = fromRate / toRate;
+      const length = Math.floor(input.length / ratio);
+      const out = new Float32Array(length);
+      for (let i = 0; i < length; i++) out[i] = input[Math.floor(i * ratio)];
+      return out;
+    }
+
+    function b64ToBytes(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+
+    function bytesToB64(bytes) {
+      let s = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      return btoa(s);
+    }
+
+    async function playPcm16(b64) {
+      if (!audioCtx) audioCtx = new AudioContext({ sampleRate: RATE });
+      const bytes = b64ToBytes(b64);
+      const samples = bytes.length / 2;
+      const buf = audioCtx.createBuffer(1, samples, RATE);
+      const ch = buf.getChannelData(0);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let i = 0; i < samples; i++) ch[i] = view.getInt16(i * 2, true) / 0x8000;
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+      const start = Math.max(playAt, audioCtx.currentTime);
+      src.start(start);
+      playAt = start + buf.duration;
+    }
+
+    async function maybeContinue() {
+      if (responseOpen || pendingCalls > 0 || outputsThisTurn === 0) return;
+      outputsThisTurn = 0;
+      ws.send(JSON.stringify({ type: "response.create" }));
+    }
+
+    async function handleFunctionCall(event) {
+      pendingCalls += 1;
+      let args = {};
+      try {
+        if (typeof event.arguments === "string") {
+          args = event.arguments ? JSON.parse(event.arguments) : {};
+        } else if (event.arguments && typeof event.arguments === "object") {
+          args = event.arguments;
+        }
+      } catch (err) {
+        console.warn("Failed to parse tool arguments:", err);
+      }
+      line("tool", `${event.name} ${JSON.stringify(args)}`, "tool");
+      let result;
+      try {
+        const resp = await fetch("/tool", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: event.name, arguments: args }),
+        });
+        result = await resp.json();
+      } catch (err) {
+        result = { error: String(err) };
+      }
+      line("tool result", JSON.stringify(result), "tool");
+      try {
+        ws.send(JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: event.call_id,
+            output: JSON.stringify(result),
+          },
+        }));
+      } catch (err) {
+        console.error("Failed to send function call output:", err);
+      } finally {
+        pendingCalls -= 1;
+        outputsThisTurn += 1;
+        await maybeContinue();
+      }
+    }
+
+    async function connect() {
+      setStatus("minting voice session");
+      let session;
+      try {
+        const resp = await fetch("/session", { method: "POST" });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(body.error || `HTTP ${resp.status}: failed to mint ephemeral token`);
+        }
+        session = body;
+      } catch (err) {
+        setStatus("session error");
+        throw err;
+      }
+      const proto = "xai-client-secret." + session.value;
+      try {
+        ws = new WebSocket(session.realtime_url, [proto]);
+      } catch (err) {
+        setStatus("websocket failed");
+        throw new Error(`WebSocket init failed: ${err.message}`);
+      }
+      await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = () => reject(new Error("Voice WebSocket connection to xAI failed. Check API key and network."));
+      });
+      ws.send(JSON.stringify({ type: "session.update", session: session.session }));
+      ws.onmessage = async (raw) => {
+        const event = JSON.parse(raw.data);
+        if (event.type === "response.created") {
+          responseOpen = true;
+        } else if (event.type === "response.done") {
+          responseOpen = false;
+          await maybeContinue();
+        } else if (event.type === "response.function_call_arguments.done") {
+          await handleFunctionCall(event);
+        } else if (event.type === "response.output_audio.delta" || event.type === "response.audio.delta") {
+          if (event.delta) playPcm16(event.delta);
+        } else if (event.type === "response.output_audio_transcript.delta") {
+          const last = logEl.querySelector("[data-live='otto']");
+          if (last) last.textContent += event.delta;
+          else {
+            const wrap = document.createElement("div");
+            wrap.className = "msg";
+            wrap.innerHTML = `<div class="who">otto</div><div data-live="otto">${event.delta || ""}</div>`;
+            logEl.appendChild(wrap);
+          }
+        } else if (event.type === "response.output_audio_transcript.done") {
+          const live = logEl.querySelector("[data-live='otto']");
+          if (live) live.removeAttribute("data-live");
+        } else if (event.type === "conversation.item.input_audio_transcription.completed") {
+          if (event.transcript) line("you", event.transcript);
+        } else if (event.type === "error") {
+          line("error", event.error?.message || JSON.stringify(event));
+        }
+      };
+      dot.classList.add("on");
+      setStatus("connected — grok-voice");
+      pollAlerts();
+    }
+
+    async function startMic() {
+      if (!ws) await connect();
+      if (!audioCtx) audioCtx = new AudioContext({ sampleRate: RATE });
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
+      source = audioCtx.createMediaStreamSource(stream);
+      processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (ev) => {
+        if (!capturing || !ws || ws.readyState !== 1) return;
+        const input = ev.inputBuffer.getChannelData(0);
+        const resampled = resample(input, audioCtx.sampleRate, RATE);
+        const pcm = floatTo16(resampled);
+        ws.send(JSON.stringify({
+          type: "input_audio_buffer.append",
+          audio: bytesToB64(new Uint8Array(pcm.buffer)),
+        }));
+      };
+      source.connect(processor);
+      const mute = audioCtx.createGain();
+      mute.gain.value = 0;
+      processor.connect(mute);
+      mute.connect(audioCtx.destination);
+      capturing = true;
+      talkBtn.textContent = "Stop";
+      talkBtn.classList.add("down");
+      setStatus("listening");
+    }
+
+    function stopMic() {
+      capturing = false;
+      talkBtn.textContent = "Talk";
+      talkBtn.classList.remove("down");
+      if (processor) processor.disconnect();
+      if (source) source.disconnect();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      setStatus("connected — grok-voice");
+    }
+
+    async function triggerAlert(alert) {
+      const note = `SafeMode alert ${alert.alert_id} on ${alert.channel} (${alert.subsystem}), confidence ${alert.confidence}. Diagnose it.`;
+      line("safemode", note);
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({
+          type: "conversation.item.create",
+          item: { type: "message", role: "user", content: [{ type: "input_text", text: note }] },
+        }));
+        ws.send(JSON.stringify({ type: "response.create" }));
+      }
+    }
+
+    async function simulateAlert(alertId) {
+      try {
+        if (!ws) await connect();
+        if (!audioCtx) audioCtx = new AudioContext({ sampleRate: RATE });
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        let alert;
+        try {
+          const data = await fetch("/alerts").then((r) => r.json());
+          alert = (data.alerts || []).find((a) => a.alert_id === alertId);
+        } catch (_) {}
+        if (!alert) {
+          alert = {
+            alert_id: alertId,
+            channel: alertId.includes("rw") ? "A-1" : "F-1",
+            subsystem: alertId.includes("rw") ? "attitude_control" : "life_support",
+            confidence: alertId.includes("rw") ? 0.93 : 0.71,
+          };
+        }
+        await triggerAlert(alert);
+      } catch (err) {
+        line("error", String(err));
+      }
+    }
+
+    function handleQuickText(text) {
+      sendText(text).catch((err) => line("error", String(err)));
+    }
+
+    async function sendText(text) {
+      if (!text.trim()) return;
+      if (!audioCtx) audioCtx = new AudioContext({ sampleRate: RATE });
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+      if (!ws) await connect();
+      line("you", text);
+      ws.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+      }));
+      ws.send(JSON.stringify({ type: "response.create" }));
+    }
+
+    async function pollAlerts() {
+      try {
+        const data = await fetch("/alerts").then((r) => r.json());
+        if (data.live) {
+          for (const alert of data.alerts || []) {
+            if (seenAlerts.has(alert.alert_id)) continue;
+            seenAlerts.add(alert.alert_id);
+            await triggerAlert(alert);
+          }
+        }
+      } catch (_) { /* ignore */ }
+      setTimeout(pollAlerts, 8000);
+    }
+
+    talkBtn.onclick = async () => {
+      try {
+        if (capturing) stopMic();
+        else await startMic();
+      } catch (err) {
+        line("error", String(err));
+      }
+    };
+    sendBtn.onclick = () => {
+      let t = textEl.value.trim();
+      if (!t) {
+        t = "I want to go to Mars";
+      }
+      textEl.value = "";
+      sendText(t).catch((err) => line("error", String(err)));
+    };
+    textEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendBtn.click();
+    });
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      if (window.location.protocol === "file:") {
+        line("warning", "Page opened directly via file://. Local API endpoints will fail. Please run 'python -m app' and navigate to http://127.0.0.1:8765 in your browser.", "error");
+        setStatus("offline (file://)");
+        return;
+      }
+      try {
+        const res = await fetch("/health");
+        if (res.ok) {
+          setStatus("ready — server online");
+        }
+      } catch (err) {
+        line("warning", "Local server not reachable at " + window.location.origin + ". Ensure 'python -m app' is running.", "error");
+        setStatus("server unreachable");
+      }
+    });
+  </script>
+</body>
+</html>
