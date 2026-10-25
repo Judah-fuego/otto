@@ -1,0 +1,34 @@
+[
+  {
+    "id": "wallops",
+    "name": "Wallops",
+    "lat": 37.9402,
+    "lon": -75.4664,
+    "elevation_m": 10,
+    "min_elevation_deg": 10
+  },
+  {
+    "id": "whitesands",
+    "name": "White Sands",
+    "lat": 32.5007,
+    "lon": -106.6086,
+    "elevation_m": 1200,
+    "min_elevation_deg": 10
+  },
+  {
+    "id": "santiago",
+    "name": "Santiago",
+    "lat": -33.151,
+    "lon": -70.667,
+    "elevation_m": 730,
+    "min_elevation_deg": 10
+  },
+  {
+    "id": "hartebeesthoek",
+    "name": "Hartebeesthoek",
+    "lat": -25.889,
+    "lon": 27.686,
+    "elevation_m": 1380,
+    "min_elevation_deg": 10
+  }
+]

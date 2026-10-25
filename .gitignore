@@ -1,0 +1,14 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+.streamlit/secrets.toml
+
+# Telemetry, TLEs, and trained weights stay local. Both people run download_data.sh.
+data/
+*.pt
+*.pth
+*.ckpt
+ml/runs/

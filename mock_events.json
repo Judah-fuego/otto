@@ -1,0 +1,18 @@
+[
+  {
+    "event_id": "rw-blackout",
+    "time": "2026-10-25T18:12:00Z",
+    "channel": "A-1",
+    "subsystem": "attitude_control",
+    "confidence": 0.93,
+    "ground_contact": false
+  },
+  {
+    "event_id": "cabin-leak",
+    "time": "2026-10-25T18:18:00Z",
+    "channel": "F-1",
+    "subsystem": "life_support",
+    "confidence": 0.71,
+    "ground_contact": false
+  }
+]
