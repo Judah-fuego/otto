@@ -4,7 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { AlertView } from "@/lib/types";
 import { clock, countdown } from "@/lib/format";
-import { HoldButton } from "./HoldButton";
+import { CrewTask } from "./CrewTask";
 import { Sparkline } from "./Sparkline";
 
 const TONE = {
@@ -25,6 +25,7 @@ export function AlertCard({ alert, now, lightDelayS, onDecide, onReopen }: Props
   const tone = TONE[alert.authority];
   const status = alert.decision.status;
   const awaiting = status === "awaiting_crew";
+  const approved = status === "approved";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFigure, setShowFigure] = useState(false);
@@ -46,12 +47,14 @@ export function AlertCard({ alert, now, lightDelayS, onDecide, onReopen }: Props
 
   return (
     <article
-      className={`arrive rounded-lg border bg-panel ${tone.border} ${awaiting ? "alarm-glow" : ""}`}
+      className={`arrive rounded-lg border transition-colors ${approved ? "border-auto/70 bg-auto/5" : `bg-panel ${tone.border}`} ${awaiting ? "alarm-glow" : ""}`}
       aria-live={awaiting ? "assertive" : "polite"}
     >
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line px-4 py-2.5">
         <div className="flex items-baseline gap-3 whitespace-nowrap">
-          <span className={`font-mono text-[11px] uppercase tracking-[0.14em] ${tone.text}`} title={tone.blurb}>{tone.label}</span>
+          <span className={`font-mono text-[11px] uppercase tracking-[0.14em] ${approved ? "text-auto" : tone.text}`} title={tone.blurb}>
+            {approved ? "✓ Crew approved" : tone.label}
+          </span>
           <h3 className="text-sm font-medium">{alert.subsystem}</h3>
           <span className="font-mono text-xs text-dim">{alert.channel}</span>
         </div>
@@ -80,6 +83,13 @@ export function AlertCard({ alert, now, lightDelayS, onDecide, onReopen }: Props
         )}
       </div>
 
+      {approved && (
+        <p className="arrive mx-4 mb-3 rounded-md border border-auto/50 bg-auto/10 px-3 py-2 text-sm text-auto">
+          <span className="mr-2 font-mono text-xs font-bold uppercase tracking-[0.14em]">✓ Done</span>
+          You approved this at {clock(alert.decision.time)}. The fix is carried out and the fault is cleared.
+        </p>
+      )}
+
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-[0.14em] text-faint">Proposed action</p>
@@ -87,21 +97,9 @@ export function AlertCard({ alert, now, lightDelayS, onDecide, onReopen }: Props
           <p className="text-xs text-dim">{alert.authority_reason}</p>
         </div>
 
-        {awaiting && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => run(() => onDecide(false))}
-              className="rounded-md border border-line px-4 py-2 text-sm text-dim hover:border-dim hover:text-ink disabled:opacity-40"
-            >
-              Reject
-            </button>
-            <HoldButton label="Hold to approve" disabled={busy} onConfirm={() => run(() => onDecide(true))} />
-          </div>
-        )}
         {status === "executed" && <Stamp className="text-auto">Done · reversible</Stamp>}
-        {status === "approved" && <Stamp className="text-crew">Crew approved</Stamp>}
+        {status === "approved" && <Stamp className="text-auto">✓ Crew approved</Stamp>}
+        {status === "timed_out" && <Stamp className="text-alarm">No crew decision in time · mission lost</Stamp>}
         {status === "rejected" && (
           <div className="flex items-center gap-3">
             <Stamp className="text-dim">Crew rejected · no action</Stamp>
@@ -121,6 +119,16 @@ export function AlertCard({ alert, now, lightDelayS, onDecide, onReopen }: Props
           </Stamp>
         )}
       </footer>
+
+      {awaiting && (
+        <CrewTask
+          key={alert.alert_id}
+          alert={alert}
+          disabled={busy}
+          onApprove={() => run(() => onDecide(true))}
+          onReject={() => run(() => onDecide(false))}
+        />
+      )}
 
       {error && <p className="px-4 pb-3 text-xs text-alarm">{error}</p>}
 

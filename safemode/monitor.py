@@ -5,7 +5,7 @@
     python -m safemode.monitor --source labels      # NASA labels, until a Telemanom run exists
     python -m safemode.monitor --fresh --speed 100 --start 2000
 
-Every tick the replay cursor moves `speed` samples. When it crosses the start of a
+Every tick the replay cursor moves `speed` samples. When it crosses the end of a
 detected window, an Alert lands in schema.ALERT_QUEUE. queue/status.json backs safemode_status.
 """
 
@@ -34,7 +34,7 @@ from schema import (
 TEST = ROOT / "data" / "smap" / "test"
 STATUS = ALERT_QUEUE.parent / "status.json"
 
-# Samples sent with each alert, oldest first. The last one is where the cursor was when it fired.
+# Minimum lead-in samples sent with each alert, oldest first. The last one is the end of the window.
 ALERT_WINDOW = 60
 
 
@@ -55,8 +55,11 @@ def load_telemetry(channels: list[str]) -> dict[str, np.ndarray]:
 
 
 def make_alert(d: det.Detection, series: np.ndarray, cursor: int) -> Alert:
+    """History before the window, then the window. diagnose() reads the first 75% as baseline,
+    so the lead-in is three times the window, and at least ALERT_WINDOW samples."""
     last = min(cursor, d.end, len(series) - 1)
-    values = series[max(0, last - ALERT_WINDOW + 1) : last + 1]
+    lead = max(ALERT_WINDOW, 3 * (last - d.start + 1))
+    values = series[max(0, d.start - lead) : last + 1]
     return Alert(
         alert_id=f"{d.channel}-{d.start}",
         time=_now(),
@@ -76,7 +79,9 @@ def run(source: str, run_id: str | None, channels: list[str], speed: int, tick: 
 
     telemetry = load_telemetry(channels)
     length = max(len(s) for s in telemetry.values())
-    pending = sorted((d for d in found if d.start >= start), key=lambda d: d.start)
+    # Telemanom pads each window by error_buffer on both sides, so its start comes before the
+    # anomaly. Fire at the end, once the detector has seen it, so `values` holds the excursion.
+    pending = sorted((d for d in found if d.end >= start), key=lambda d: d.end)
 
     queue = [] if fresh else load_alerts(ALERT_QUEUE)
     seen = {a.alert_id for a in queue}
@@ -107,7 +112,7 @@ def run(source: str, run_id: str | None, channels: list[str], speed: int, tick: 
     try:
         while cursor < length:
             cursor = min(cursor + speed, length)
-            while pending and pending[0].start <= cursor:
+            while pending and pending[0].end <= cursor:
                 d = pending.pop(0)
                 alert = make_alert(d, telemetry[d.channel], cursor)
                 if alert.alert_id in seen:

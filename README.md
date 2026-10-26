@@ -23,7 +23,7 @@ bash download_data.sh
 python schema.py
 ```
 
-Person B starts the crew interface with `python -m app` (Grok Voice at http://127.0.0.1:8765). Text fallback: `python -m app.chat`. Check the calculator with `python -m voyage`.
+Person B starts the crew console with `bash dev.sh` (http://127.0.0.1:3000). The mic is a live Grok Voice call. Check the calculator with `python -m voyage`.
 
 `download_data.sh` fills `data/` (gitignored):
 
@@ -83,7 +83,6 @@ Planets are direct Hohmann transfers around the Sun with no gravity assists, so 
 ```bash
 ./dev.sh                    # API on :8000 (app/server.py), console on http://localhost:3000 (web/)
 OTTO_ALERTS=mock ./dev.sh   # pin the scripted demo alerts
-streamlit run app/ui.py     # fallback console, same tools and gate
 ```
 
 Alerts come from the live queue once it has any, from `mock_alerts.json` until then. Crew decisions and the action log live in `queue/decisions.json`; "reset demo" in the console clears them.

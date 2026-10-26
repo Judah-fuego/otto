@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from app import mission, simulate
+from app import flight, mission, simulate
 from app.gate import decide
 from safemode.monitor import safemode_status as _monitor_status
 from schema import (
@@ -38,7 +38,21 @@ def alert_source() -> str:
 
 
 def current_alerts() -> list[Alert]:
-    return load_alerts(ALERT_QUEUE if alert_source() == "queue" else MOCK_ALERTS) + simulate.load()
+    """Scripted faults, plus whatever SafeMode has written.
+
+    A flight used to hide the queue so the launch did not replay the whole backlog. Alerts
+    already settled stay hidden (status "cleared"); new detections still have to come through,
+    or SafeMode never reaches the console while the ship is flying.
+    """
+    if os.getenv("OTTO_ALERTS", "").lower() == "mock":
+        live: list[Alert] = []
+    else:
+        live = load_alerts(ALERT_QUEUE)
+    if flight.active():
+        return simulate.load() + live
+    if alert_source() != "queue":
+        return load_alerts(MOCK_ALERTS) + simulate.load()
+    return live + simulate.load()
 
 
 def find_alert(alert_id: str) -> Alert:
@@ -69,7 +83,8 @@ def diagnose(alert_id: str) -> dict[str, Any]:
         "time": alert.time,
         "channel": alert.channel,
         "subsystem": subsystem["label"],
-        "likely_causes": subsystem["examples"],
+        "subsystem_key": alert.subsystem,
+        "likely_causes": decision.action.causes or subsystem["examples"],
         "confidence": alert.confidence,
         "telemetry": {
             "baseline_mean": round(float(baseline.mean()), 4),
@@ -83,6 +98,9 @@ def diagnose(alert_id: str) -> dict[str, Any]:
         "reversible": decision.action.reversible,
         "authority": decision.authority.value,
         "authority_reason": decision.reason,
+        "procedure": decision.action.procedure,
+        "checklist": list(decision.action.checklist),
+        "if_not_done": decision.action.if_not_done,
     }
 
 
@@ -120,8 +138,8 @@ def mission_status() -> dict[str, Any]:
     awaiting_crew = [s for s in systems if s["status"] == "awaiting_crew"]
     with_ground = [s for s in systems if s["status"] == "escalated"]
     # Rejecting the fix leaves the fault in place, so it stays open.
-    crew_declined = [s for s in systems if s["status"] == "rejected"]
-    supplies = mission.consumables()
+    crew_declined = [s for s in systems if s["status"] in ("rejected", "timed_out")]
+    supplies = mission.consumables(flight.mission_now())
     short = [name for name, c in supplies.items() if c["margin_days_after_arrival"] < 0]
     if awaiting_crew or short:
         overall = "action_needed"
@@ -131,7 +149,7 @@ def mission_status() -> dict[str, Any]:
         overall = "nominal"
     return {
         "overall": overall,
-        "trajectory": mission.trajectory(),
+        "trajectory": mission.trajectory(flight.mission_now()),
         "consumables": supplies,
         "systems": {
             "awaiting_crew": awaiting_crew,
@@ -188,7 +206,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "diagnose",
             "description": "Diagnose one SafeMode alert: telemetry shift, likely causes, the proposed action, "
-            "and who has authority to act (auto, ask_crew, escalate).",
+            "who has authority to act (auto, ask_crew, escalate), the crew checklist for it, and what "
+            "happens if the fix is not done (if_not_done).",
             "parameters": {
                 "type": "object",
                 "properties": {"alert_id": {"type": "string"}},
@@ -217,7 +236,7 @@ def call_tool(name: str, arguments: str | dict[str, Any]) -> str:
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-# Grok Voice (app/voice.py, app/static/index.html) uses the flat realtime tool shape and dict results.
+# The live headset (app/voice.py, web/lib/agent.ts) uses the flat realtime tool shape and dict results.
 DEFAULT_MASS_KG = 10000.0
 DEFAULT_ISP_S = 300.0
 DEFAULT_CREW = 4

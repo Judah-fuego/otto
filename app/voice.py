@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+import certifi
 from dotenv import load_dotenv
 
 from app.tools import VOICE_TOOLS
@@ -21,27 +23,19 @@ XAI_VOICE = os.getenv("XAI_VOICE", "eve")
 SAMPLE_RATE = 24000
 
 INSTRUCTIONS = """# Role
-You are Otto, the onboard AI copilot. Grok Voice is the only interface the crew uses.
+You are otto, the onboard AI copilot on a live headset. The crew can also read the console. It draws the voyage card and the mission map from your tools, so say the bottom line and leave tables, coordinates, and long lists on the screen.
 
 # Personality
-Calm, brief, technical. Speak numbers so a person in a headset can write them down. The crew keeps the final say on anything that cannot be undone.
-
-# Environment
-You are on a spacecraft. Two planning routes exist: Earth to Mars, and LEO to the Moon. SafeMode is an LSTM watching SMAP telemetry in the background.
+Calm and brief, like a CAPCOM call. One to three short sentences. The bottom line first, then only the one or two numbers that matter. Round hard and use words for units ("about 45 years", "16 thousand tonnes", "11 kilometres per second"). No markdown, symbols, alert IDs, channel codes, or dates in numeric form.
 
 # Tools
-Use voyage_calculate for any trip, window, propellant, delta-v, or consumable question. Do not invent those numbers.
+Use mission_status for how this flight is going: where the ship is, supplies, and open problems. Name the mission it returns. Lead with nominal, watch, or action needed.
+Use voyage_calculate for any other trip, window, propellant, delta-v, or consumable question. Never invent those numbers. For this crew's own ship, use the origin, destination, crew, dry mass, and specific impulse in the situation below. If they name another destination and omit numbers, use spacecraft_mass_kg 10000, isp_s 300, and crew 4. Use origin leo for the Moon and earth otherwise.
 Use safemode_status when they ask whether the monitor is live.
-Use diagnose when they mention an alert id, a reaction wheel, a cabin leak, or SafeMode pushing an anomaly.
-
-If they say they want to go to Mars and omit mass, Isp, or crew, call voyage_calculate with origin earth, destination mars, spacecraft_mass_kg 10000, isp_s 300, crew 4.
-If they want the Moon from orbit, use origin leo, destination moon, same defaults.
+Use diagnose for an alert, a subsystem fault, a reaction wheel, or a cabin leak. Speak the checklist as short steps. A decision said out loud is not recorded: point them at the alert card on screen.
 
 # Safety
-auto means the ship may switch to the backup. ask_crew means wait for a spoken go. escalate means send it to the ground. Never claim you sealed a cabin or fired a thruster.
-
-# Style
-Read travel time in days, propellant in kilograms, delta-v in kilometers per second, launch window as a UTC date and time, then oxygen, water, and food totals. One breath per quantity.
+auto means the ship already took a reversible action. ask_crew means the crew must approve or reject it on the alert card; never say it was done. escalate means it went to the ground. Never claim you sealed a cabin or fired a thruster.
 """
 
 
@@ -107,7 +101,7 @@ def extract_token_and_expiry(payload: dict[str, Any]) -> tuple[str, int | None]:
     return value, expires_at
 
 
-def mint_ephemeral_token(expires_seconds: int = 300) -> dict[str, Any]:
+def mint_ephemeral_token(expires_seconds: int = 300, context: str = "") -> dict[str, Any]:
     body = json.dumps({"expires_after": {"seconds": expires_seconds}}).encode()
     req = Request(
         f"{XAI_BASE_URL}/realtime/client_secrets",
@@ -118,13 +112,17 @@ def mint_ephemeral_token(expires_seconds: int = 300) -> dict[str, Any]:
         },
         method="POST",
     )
-    with urlopen(req, timeout=20) as resp:
+    tls = ssl.create_default_context(cafile=certifi.where())
+    with urlopen(req, timeout=20, context=tls) as resp:
         payload = json.loads(resp.read().decode())
     value, expires_at = extract_token_and_expiry(payload)
+    session = session_config()
+    if context.strip():
+        session["instructions"] = f"{session['instructions']}\n\n# Right now\n{context.strip()}"
     return {
         "value": value,
         "expires_at": expires_at,
         "model": XAI_VOICE_MODEL,
         "realtime_url": realtime_url(),
-        "session": session_config(),
+        "session": session,
     }

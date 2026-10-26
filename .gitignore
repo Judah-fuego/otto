@@ -4,14 +4,14 @@ venv/
 __pycache__/
 *.py[cod]
 .DS_Store
-.streamlit/secrets.toml
-
 # Telemetry, ephemeris, the live alert queue, and trained weights stay local.
 data/
 queue/alerts.json
 queue/status.json
 queue/decisions.json
 queue/simulated.json
+queue/flight.json
+queue/mission.json
 queue/*.tmp
 queue/*.db
 queue/*.sqlite

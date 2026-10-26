@@ -39,8 +39,8 @@
 }
 
 @keyframes alarm-flash {
-  0%, 100% { background-color: #d93b3b; }
-  50% { background-color: #9e1f1f; }
+  0%, 100% { background-color: #ff2d2d; }
+  50% { background-color: #6e0d0d; }
 }
 
 @keyframes ticker {
@@ -50,8 +50,8 @@
 
 .heartbeat { animation: heartbeat 1.6s ease-in-out infinite; }
 .alarm-glow { animation: alarm-glow 1.4s ease-in-out infinite; }
-.alarm-flash { animation: alarm-flash 1.2s ease-in-out infinite; }
-.ticker-track { width: max-content; animation: ticker 22s linear infinite; }
+.alarm-flash { animation: alarm-flash 0.45s ease-in-out infinite; }
+.ticker-track { width: max-content; animation: ticker 12s linear infinite; }
 .ticker:hover .ticker-track { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {

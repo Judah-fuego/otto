@@ -20,8 +20,7 @@ import math
 from datetime import datetime
 
 from ml.data import anomaly_spans
-from ml.telemanom import RESULTS, evaluate_sequences, resolve_channels
-from ml.train import RUNS
+from ml.telemanom import RESULTS, RUNS, evaluate_sequences, resolve_channels
 
 
 def score_confidence(score: float) -> float:

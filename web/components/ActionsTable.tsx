@@ -52,7 +52,7 @@ export function ActionsTable({ log, alerts, onOpen }: Props) {
                 <th className="px-3 py-2 font-normal">by</th>
                 <th className="px-3 py-2 font-normal">subsystem</th>
                 <th className="px-3 py-2 font-normal">channel</th>
-                <th className="px-3 py-2 text-right font-normal">conf</th>
+                <th className="px-3 py-2 text-right font-normal">confidence</th>
                 <th className="px-3 py-2 font-normal">action</th>
                 <th className="px-3 py-2 font-normal">now</th>
               </tr>

@@ -25,18 +25,23 @@ export function ChatMessage({ message }: { message: Message }) {
           <VoyageCard key={i} v={c.result as unknown as VoyageResult} />
         ),
       )}
-      <div className="flex gap-3">
-        <span className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-faint">otto</span>
-        <div className="prose-otto min-w-0 flex-1 space-y-2 text-sm leading-relaxed">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
-          <p className="flex gap-3 font-mono text-[11px] text-faint">
-            <button type="button" onClick={() => speak(message.speech ?? spoken(message.content), { interrupt: true })} className="hover:text-dim">
-              ▶ speak
-            </button>
-            {others.length > 0 && <span>used {others.map((c) => c.name).join(", ")}</span>}
-          </p>
+      {(message.content || others.length > 0) && (
+        <div className="flex gap-3">
+          <span className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-faint">otto</span>
+          <div className="prose-otto min-w-0 flex-1 space-y-2 text-sm leading-relaxed">
+            {message.content && <ReactMarkdown>{message.content}</ReactMarkdown>}
+            <p className="flex gap-3 font-mono text-[11px] text-faint">
+              {message.content && !message.live && (
+                <button type="button" onClick={() => speak(message.speech ?? spoken(message.content), { interrupt: true })} className="hover:text-dim">
+                  ▶ speak
+                </button>
+              )}
+              {message.live && <span>on the call</span>}
+              {others.length > 0 && <span>used {others.map((c) => c.name).join(", ")}</span>}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

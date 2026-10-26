@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AlertView, LogEntry, SafeModeStatus, Trajectory } from "@/lib/types";
-import { clock } from "@/lib/format";
+import { clock, distanceFromEarth, lightDelay, placeName } from "@/lib/format";
 import { MissionMap } from "./MissionMap";
 
 const KIND = {
@@ -17,9 +17,16 @@ const SCENARIOS = [
   { id: "reaction_wheel", label: "Reaction wheel", expect: "auto" },
   { id: "power_bus", label: "Power bus", expect: "auto" },
   { id: "cooling_loop", label: "Cooling loop", expect: "auto" },
+  { id: "flight_computer", label: "Flight computer", expect: "auto" },
   { id: "transponder", label: "Transponder", expect: "ground" },
   { id: "cabin_leak", label: "Cabin leak", expect: "crew" },
   { id: "thruster_valve", label: "Thruster valve", expect: "crew" },
+  { id: "antenna_deploy", label: "Antenna boom", expect: "crew" },
+  { id: "co2_scrubber", label: "CO2 scrubber", expect: "crew" },
+  { id: "battery_runaway", label: "Battery runaway", expect: "crew" },
+  { id: "avionics_fire", label: "Avionics fire", expect: "crew" },
+  { id: "tumble", label: "Tumble", expect: "crew" },
+  { id: "solar_flare", label: "Solar flare", expect: "crew" },
 ] as const;
 
 type Props = {
@@ -68,7 +75,10 @@ export function SidePanel({ mission, safemode, alerts, log, onFocus, onOpenTable
       </Section>
 
       {mission && (
-        <Section title={`${mission.mission} · day ${mission.mission_day}`}>
+        <Section title={mission.phase === "ready" ? `${mission.mission} · staged` : mission.phase === "arrived" ? `${mission.mission} · arrived` : `${mission.mission} · day ${mission.mission_day}`}>
+          <p className="mb-2 text-xs text-dim">
+            {placeName(mission.origin)} → {placeName(mission.destination)} · {mission.site}
+          </p>
           <div className="flex justify-center">
             <MissionMap t={mission} size={220} />
           </div>
@@ -76,9 +86,9 @@ export function SidePanel({ mission, safemode, alerts, log, onFocus, onOpenTable
             <div className="h-full bg-auto/70" style={{ width: `${mission.progress * 100}%` }} />
           </div>
           <dl className="mt-2 space-y-1.5 font-mono text-xs tabular">
-            <Row k="to arrival" v={`${Math.round(mission.days_to_arrival)} d`} />
-            <Row k="from Earth" v={`${(mission.distance_to_earth_km / 1e6).toFixed(1)} M km`} />
-            <Row k="light delay" v={`${mission.one_way_light_delay_min} min`} />
+            <Row k="to arrival" v={`${Math.round(mission.days_to_arrival)} days`} />
+            <Row k="from Earth" v={distanceFromEarth(mission.distance_to_earth_km)} />
+            <Row k="light delay" v={lightDelay(mission.one_way_light_delay_s)} />
           </dl>
         </Section>
       )}

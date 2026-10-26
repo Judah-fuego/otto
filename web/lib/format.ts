@@ -3,15 +3,15 @@ export function clock(iso: string): string {
 }
 
 export function mass(kg: number): string {
-  if (kg >= 1_000_000) return `${(kg / 1_000_000).toFixed(2)} kt`;
-  if (kg >= 1_000) return `${(kg / 1_000).toFixed(1)} t`;
-  return `${kg.toFixed(0)} kg`;
+  if (kg >= 1_000_000) return `${(kg / 1_000_000).toFixed(2)} thousand tons`;
+  if (kg >= 1_000) return `${(kg / 1_000).toFixed(1)} tons`;
+  return `${kg.toFixed(0)} kilograms`;
 }
 
 export function duration(days: number): string {
-  if (days < 60) return `${days.toFixed(1)} d`;
-  if (days < 730) return `${Math.round(days)} d`;
-  return `${(days / 365.25).toFixed(1)} yr`;
+  if (days < 60) return `${days.toFixed(1)} days`;
+  if (days < 730) return `${Math.round(days)} days`;
+  return `${(days / 365.25).toFixed(1)} years`;
 }
 
 export function countdown(seconds: number): string {
@@ -22,4 +22,23 @@ export function countdown(seconds: number): string {
 
 export function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function placeName(s: string): string {
+  if (s === "leo") return "Low Earth orbit";
+  return titleCase(s);
+}
+
+export function distanceFromEarth(km: number): string {
+  if (km < 10_000) return `${Math.round(km).toLocaleString()} kilometers`;
+  if (km < 1_000_000) return `${Math.round(km / 1000).toLocaleString()} thousand kilometers`;
+  return `${(km / 1e6).toFixed(1)} million kilometers`;
+}
+
+export function lightDelay(seconds: number): string {
+  if (seconds < 1) return "under a second";
+  if (seconds < 90) return `${Math.round(seconds)} seconds`;
+  const minutes = seconds / 60;
+  if (minutes < 90) return `${Math.round(minutes)} minutes`;
+  return `${(seconds / 3600).toFixed(1)} hours`;
 }

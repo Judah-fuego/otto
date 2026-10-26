@@ -48,7 +48,7 @@ export function HoldButton({ label, holdMs = 2000, disabled, onConfirm }: Props)
       className="relative overflow-hidden rounded-md border border-alarm/70 px-4 py-2 text-sm font-medium text-alarm select-none touch-none disabled:opacity-40"
     >
       <span className="absolute inset-y-0 left-0 bg-alarm/25" style={{ width: `${progress * 100}%` }} aria-hidden />
-      <span className="relative">{progress > 0 ? `Keep holding… ${Math.ceil((1 - progress) * (holdMs / 1000))}s` : label}</span>
+      <span className="relative">{progress > 0 ? `Keep holding… ${Math.ceil((1 - progress) * (holdMs / 1000))} seconds` : label}</span>
     </button>
   );
 }

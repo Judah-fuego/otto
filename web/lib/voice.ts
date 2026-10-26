@@ -100,10 +100,24 @@ function synthesize(text: string, rate: number): Promise<void> {
   });
 }
 
+let klaxonNodes: OscillatorNode[] = [];
+
+function silenceKlaxon(): void {
+  for (const osc of klaxonNodes) {
+    try {
+      osc.stop();
+    } catch {
+      // Already finished.
+    }
+  }
+  klaxonNodes = [];
+}
+
 export function stop(): void {
   if (typeof window === "undefined") return;
   generation++;
   queue = Promise.resolve();
+  silenceKlaxon();
   if (playing) {
     playing.audio.pause();
     playing.done();
@@ -143,6 +157,10 @@ function klaxon(): Promise<void> {
       osc.connect(gain).connect(ctx.destination);
       osc.start(t);
       osc.stop(t + 0.17);
+      klaxonNodes.push(osc);
+      osc.onended = () => {
+        klaxonNodes = klaxonNodes.filter((n) => n !== osc);
+      };
     }
   }
   return new Promise((done) => setTimeout(done, 1350));

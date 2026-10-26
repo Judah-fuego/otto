@@ -1,6 +1,6 @@
 """Where SafeMode learns which telemetry windows are anomalous.
 
-`telemanom` reads ml/results/<run_id>.csv from `python ml/run.py`.
+`telemanom` reads ml/results/<run_id>.csv from `python -m ml.ensemble` (or `python -m ml.telemanom --channels ...`).
 `labels` reads NASA's labeled_anomalies.csv. Use it only to exercise the
 pipeline before a Telemanom run finishes, since it is the answer key.
 """
@@ -21,7 +21,7 @@ ML = ROOT / "ml"
 RESULTS = ML / "results"
 LABELS = ROOT / "data" / "smap" / "labeled_anomalies.csv"
 
-# Telemanom's anom_scores index y_test, which starts l_s samples into the channel. Matches ml/config.yaml.
+# Telemanom's anom_scores index y_test, which starts l_s samples into the channel. Matches ml.telemanom.Config.l_s.
 L_S = 250
 
 LABEL_CONFIDENCE = 0.9
@@ -54,7 +54,7 @@ def latest_run_id() -> str | None:
 def from_telemanom(run_id: str | None = None) -> tuple[str, list[Detection]]:
     run_id = run_id or latest_run_id()
     if run_id is None:
-        raise FileNotFoundError(f"No Telemanom results in {RESULTS}. Run `python ml/run.py --channels ...` first")
+        raise FileNotFoundError(f"No Telemanom results in {RESULTS}. Run `python -m ml.telemanom --channels default` first")
     df = pd.read_csv(RESULTS / f"{run_id}.csv")
 
     detections = []

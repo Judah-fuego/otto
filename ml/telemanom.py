@@ -2,6 +2,7 @@
 
 Model: two stacked LSTMs (80, 80) read `l_s` = 250 rows and predict the next
 `n_predictions` = 10 telemetry values. The first prediction is the forecast.
+By default each prediction is a step from the last value; `--absolute` is NASA's head.
 
 Errors: |y_hat - y| smoothed with an EWM, then thresholded per window of
 `window_size` batches of `batch_size` points. Each window picks the
@@ -9,9 +10,9 @@ mean + z * std line that best shrinks the error mean and spread, checks the
 inverted errors too, and prunes sequences that barely clear the next highest
 error. No labels are used. NASA spans only score the result.
 
-    python -m ml.telemanom --channel F-1 --seed 0
-    python -m ml.telemanom --channel F-1 --seed 0 --forecaster residual
-    python -m ml.telemanom --channels all --seed 0 --reuse
+    python -m ml.telemanom --channel F-2 --seed 0
+    python -m ml.telemanom --channel F-2 --seed 0 --absolute
+    python -m ml.telemanom --channels default --seed 0 --reuse
 """
 
 from __future__ import annotations
@@ -29,11 +30,24 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from sklearn.metrics import average_precision_score
 from torch import nn
 
-from ml.data import DATA, N_FEATURES, WINDOW, anomaly_spans, load_series, windows
-from ml.threshold import overlapping, sequence_scores, smoothed_auprc
-from ml.train import FIGURES, RUNS, device, load_forecaster, predict, set_seed
+from ml.data import DATA, N_FEATURES, ROOT, anomaly_spans, load_series
+
+RUNS = ROOT / "ml" / "runs"
+FIGURES = ROOT / "ml" / "figures"
+
+
+def set_seed(seed: int) -> None:
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def device() -> torch.device:
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 @dataclass(frozen=True)
@@ -54,20 +68,29 @@ class Config:
     smoothing_perc: float = 0.05
     error_buffer: int = 100
     p: float = 0.13
+    residual: bool = True
 
 
 class TelemanomLSTM(nn.Module):
+    """With `residual`, each forecast is the last observed value plus a learned step.
+
+    An absolute forecaster collapses to the train mean on spiky or level-shifted
+    channels; anchoring on the last value keeps it no worse than persistence.
+    """
+
     def __init__(
         self,
         n_features: int = N_FEATURES,
         layers: tuple[int, int] = (80, 80),
         dropout: float = 0.3,
         n_predictions: int = 10,
+        residual: bool = True,
     ):
         super().__init__()
         self.layers = tuple(layers)
         self.dropout_rate = dropout
         self.n_predictions = n_predictions
+        self.residual = residual
         self.lstm1 = nn.LSTM(n_features, layers[0], batch_first=True)
         self.lstm2 = nn.LSTM(layers[0], layers[1], batch_first=True)
         self.drop = nn.Dropout(dropout)
@@ -81,7 +104,10 @@ class TelemanomLSTM(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         sequence, _ = self.lstm1(inputs)
         sequence, _ = self.lstm2(self.drop(sequence))
-        return self.head(self.drop(sequence[:, -1]))
+        step = self.head(self.drop(sequence[:, -1]))
+        if self.residual:
+            return inputs[:, -1, :1] + step
+        return step
 
 
 def shape_data(series: np.ndarray, cfg: Config) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -109,20 +135,27 @@ def _loss(model: TelemanomLSTM, frames: np.ndarray, targets: np.ndarray, dev: to
 
 
 def train_telemanom(channel: str, seed: int, cfg: Config) -> TelemanomLSTM:
-    """Keras fit with validation_split: shuffle once, hold out the last fraction."""
+    """Hold out the last fraction of the train stream in time order and keep the best epoch.
+
+    NASA shuffles before splitting, so validation windows share 249 of 250 rows
+    with training windows and early stopping never sees unseen data.
+    """
     set_seed(seed)
     dev = device()
     frames, targets, _ = shape_data(load_series(channel, "train"), cfg)
-    order = np.random.permutation(len(frames))
-    frames = np.ascontiguousarray(frames[order])
-    targets = targets[order]
     split = int(len(frames) * (1.0 - cfg.validation_split))
-    train_x, train_y = frames[:split], targets[:split]
-    val_x, val_y = frames[split:], targets[split:]
+    gap = cfg.l_s + cfg.n_predictions
+    train_x, train_y = np.ascontiguousarray(frames[:split]), targets[:split]
+    val_x, val_y = frames[split + gap :], targets[split + gap :]
+    if len(val_x) < 10:
+        val_x, val_y = frames[split:], targets[split:]
 
-    model = TelemanomLSTM(layers=cfg.layers, dropout=cfg.dropout, n_predictions=cfg.n_predictions).to(dev)
+    model = TelemanomLSTM(
+        layers=cfg.layers, dropout=cfg.dropout, n_predictions=cfg.n_predictions, residual=cfg.residual
+    ).to(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     best_val = float("inf")
+    best_state: dict[str, torch.Tensor] | None = None
     stall = 0
     for epoch in range(1, cfg.epochs + 1):
         model.train()
@@ -133,22 +166,26 @@ def train_telemanom(channel: str, seed: int, cfg: Config) -> TelemanomLSTM:
             optimizer.zero_grad()
             loss = (model(batch_x) - batch_y).pow(2).mean()
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             total += float(loss.detach()) * len(batch)
         val_loss = _loss(model, val_x, val_y, dev)
         marker = ""
+        if val_loss < best_val:
+            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
         if val_loss < best_val - cfg.min_delta:
-            best_val = val_loss
             stall = 0
             marker = "  best"
         else:
             stall += 1
+        best_val = min(best_val, val_loss)
         print(f"epoch {epoch:02d}  loss {total / split:.6f}  val_loss {val_loss:.6f}{marker}", flush=True)
         if stall >= cfg.patience:
             print(f"early stop at epoch {epoch}")
             break
 
-    # Keras EarlyStopping keeps the last weights, not the best ones
+    if best_state is not None:
+        model.load_state_dict(best_state)
     model.eval()
     return model
 
@@ -180,8 +217,11 @@ def load_telemanom(channel: str, seed: int) -> tuple[TelemanomLSTM, Config]:
     blob = torch.load(checkpoint_path(channel, seed), map_location="cpu", weights_only=False)
     saved = dict(blob["config"])
     saved["layers"] = tuple(saved["layers"])
+    saved.setdefault("residual", False)
     cfg = Config(**saved)
-    model = TelemanomLSTM(layers=cfg.layers, dropout=cfg.dropout, n_predictions=cfg.n_predictions)
+    model = TelemanomLSTM(
+        layers=cfg.layers, dropout=cfg.dropout, n_predictions=cfg.n_predictions, residual=cfg.residual
+    )
     model.load_state_dict(blob["state_dict"])
     model.to(device())
     model.eval()
@@ -406,6 +446,37 @@ def detect(actual: np.ndarray, predicted: np.ndarray, index: np.ndarray, cfg: Co
     }
 
 
+def overlaps(start: int, end: int, other_start: int, other_end: int) -> bool:
+    return start <= other_end and other_start <= end
+
+
+def overlapping(found: list[tuple[int, int]], labels: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    return [(start, end) for start, end in found if any(overlaps(start, end, a, b) for a, b in labels)]
+
+
+def sequence_scores(found: list[tuple[int, int]], labels: list[tuple[int, int]]) -> dict[str, float]:
+    """Sequence precision, recall, and F0.5. A flagged run that overlaps a label is a hit; no point-adjust."""
+    precision = len(overlapping(found, labels)) / len(found) if found else 0.0
+    if labels:
+        recall = sum(1 for a, b in labels if any(overlaps(start, end, a, b) for start, end in found)) / len(labels)
+    else:
+        recall = 0.0
+    beta2 = 0.25
+    denom = beta2 * precision + recall
+    f05 = (1.0 + beta2) * precision * recall / denom if denom else 0.0
+    return {"precision": precision, "recall": recall, "f0.5": f05}
+
+
+def smoothed_auprc(index: np.ndarray, smoothed: np.ndarray, labels: list[tuple[int, int]]) -> float:
+    """Average precision of the smoothed error against point membership in a span."""
+    truth = np.zeros(len(index), dtype=np.int8)
+    for start, end in labels:
+        truth[(index >= start) & (index <= end)] = 1
+    if int(truth.sum()) == 0 or int(truth.sum()) == len(truth):
+        return float("nan")
+    return float(average_precision_score(truth, smoothed))
+
+
 def evaluate_sequences(spans: list[tuple[int, int]], labels: list[tuple[int, int]]) -> dict:
     """Detector.evaluate_sequences: each label counts once, each unmatched span is a FP.
 
@@ -440,7 +511,7 @@ def plot_detection(
     result: dict,
 ) -> Path:
     FIGURES.mkdir(parents=True, exist_ok=True)
-    path = FIGURES / f"{channel}_seed{seed}_telemanom_{forecaster}.png"
+    path = FIGURES / f"{channel}_seed{seed}_telemanom_telemanom.png"
     figure, axes = plt.subplots(2, 1, figsize=(11, 6.5), sharex=True, constrained_layout=True)
     for axis in axes:
         for start, end in labels:
@@ -482,22 +553,17 @@ def resolve_channels(spec: str) -> list[str]:
     return [name.strip() for name in spec.split(",") if name.strip()]
 
 
-def run_channel(channel: str, seed: int, forecaster: str, reuse: bool, cfg: Config) -> dict:
-    test_series = load_series(channel, "test")
-    if forecaster == "telemanom":
-        if reuse and checkpoint_path(channel, seed).exists():
-            model, saved = load_telemanom(channel, seed)
-            cfg = replace(saved, smoothing_perc=cfg.smoothing_perc)
-        else:
-            model = train_telemanom(channel, seed, cfg)
-            print(f"checkpoint {save_telemanom(model, channel, seed, cfg)}")
-        frames, targets, index = shape_data(test_series, cfg)
-        actual = targets[:, 0]
-        predicted = predict_first(model, frames)
+def run_channel(channel: str, seed: int, reuse: bool, cfg: Config) -> dict:
+    if reuse and checkpoint_path(channel, seed).exists():
+        model, saved = load_telemanom(channel, seed)
+        cfg = replace(saved, smoothing_perc=cfg.smoothing_perc)
     else:
-        cfg = replace(cfg, l_s=WINDOW)
-        frames, actual, index = windows(test_series, WINDOW)
-        predicted = predict(load_forecaster(channel, seed), frames)
+        model = train_telemanom(channel, seed, cfg)
+        print(f"checkpoint {save_telemanom(model, channel, seed, cfg)}")
+    frames, targets, index = shape_data(load_series(channel, "test"), cfg)
+    actual = targets[:, 0]
+    predicted = predict_first(model, frames)
+    forecaster = "residual" if cfg.residual else "absolute"
 
     labels = anomaly_spans(channel)
     result = detect(actual, predicted, index, cfg)
@@ -522,7 +588,7 @@ def run_channel(channel: str, seed: int, forecaster: str, reuse: bool, cfg: Conf
         "anom_scores": result["anom_scores"],
         "label_hits": hits,
     }
-    out = RUNS / channel / f"seed{seed}_telemanom_{forecaster}.json"
+    out = RUNS / channel / f"seed{seed}_telemanom_telemanom.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=2) + "\n")
     figure = plot_detection(channel, seed, forecaster, index, actual, predicted, labels, result)
@@ -624,12 +690,6 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--forecaster",
-        choices=("telemanom", "residual"),
-        default="telemanom",
-        help="telemanom trains NASA's model; residual reuses ml.train's checkpoint",
-    )
-    parser.add_argument(
         "--reuse", action="store_true", help="load the saved telemanom checkpoint when one exists instead of training"
     )
     parser.add_argument("--epochs", type=int, default=Config.epochs)
@@ -639,11 +699,14 @@ def main() -> None:
         default=Config.smoothing_perc,
         help="EWM span as a fraction of batch_size * window_size; lower keeps one-sample spikes",
     )
+    parser.add_argument(
+        "--absolute", action="store_true", help="NASA's original head: forecast the value itself, not a step from the last one"
+    )
     args = parser.parse_args()
 
-    cfg = Config(epochs=args.epochs, smoothing_perc=args.smoothing_perc)
+    cfg = Config(epochs=args.epochs, smoothing_perc=args.smoothing_perc, residual=not args.absolute)
     if not args.channels:
-        record = run_channel(args.channel, args.seed, args.forecaster, args.reuse, cfg)
+        record = run_channel(args.channel, args.seed, args.reuse, cfg)
         if not record["label_hits"]:
             raise SystemExit("Telemanom threshold does not overlap the NASA span.")
         return
@@ -653,8 +716,8 @@ def main() -> None:
     records = []
     for position, channel in enumerate(channels, start=1):
         print(f"\n=== {position}/{len(channels)} {channel} ===", flush=True)
-        records.append(run_channel(channel, args.seed, args.forecaster, args.reuse, cfg))
-        summarize(records, args.seed, args.forecaster, cfg.smoothing_perc, run_id)
+        records.append(run_channel(channel, args.seed, args.reuse, cfg))
+        summarize(records, args.seed, records[-1]["forecaster"], cfg.smoothing_perc, run_id)
     print(f"results {RESULTS / (run_id + '.csv')}")
 
 

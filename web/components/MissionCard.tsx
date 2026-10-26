@@ -1,5 +1,5 @@
 import type { MissionStatus, SystemItem } from "@/lib/types";
-import { mass, titleCase } from "@/lib/format";
+import { distanceFromEarth, lightDelay, mass, placeName } from "@/lib/format";
 import { MissionMap } from "./MissionMap";
 
 const OVERALL = {
@@ -12,6 +12,7 @@ const STATUS_TEXT: Record<SystemItem["status"], string> = {
   executed: "done",
   approved: "crew approved",
   rejected: "crew rejected",
+  timed_out: "no decision in time",
   escalated: "with ground",
   awaiting_crew: "awaiting crew",
 };
@@ -29,10 +30,12 @@ export function MissionCard({ m }: { m: MissionStatus }) {
             {tone.label}
           </span>
           <h3 className="text-sm font-medium">
-            {t.mission} · {titleCase(t.origin)} → {titleCase(t.destination)} · {t.crew} crew
+            {t.mission} · {placeName(t.origin)} → {placeName(t.destination)} · {t.site} · {t.crew} crew
           </h3>
         </div>
-        <span className="font-mono text-xs text-faint tabular">day {t.mission_day} of {t.transit_days}</span>
+        <span className="font-mono text-xs text-faint tabular">
+          {t.phase === "ready" ? "staged at departure" : t.phase === "arrived" ? "arrived" : `day ${t.mission_day} of ${t.transit_days}`}
+        </span>
       </header>
 
       <div className="flex flex-wrap items-center gap-5 p-4">
@@ -41,7 +44,7 @@ export function MissionCard({ m }: { m: MissionStatus }) {
           <div>
             <div className="mb-1.5 flex justify-between font-mono text-xs tabular">
               <span className="text-faint">to {t.destination}</span>
-              <span className="text-ink">{Math.round(t.progress * 100)}% · {Math.round(t.days_to_arrival)} d left</span>
+              <span className="text-ink">{Math.round(t.progress * 100)}% · {Math.round(t.days_to_arrival)} days left</span>
             </div>
             <Bar fraction={t.progress} className="bg-auto" />
             <div className="mt-1 flex justify-between font-mono text-[11px] text-faint tabular">
@@ -51,8 +54,8 @@ export function MissionCard({ m }: { m: MissionStatus }) {
           </div>
 
           <dl className="space-y-1.5 font-mono text-xs tabular">
-            <Row k="from Earth" v={`${(t.distance_to_earth_km / 1e6).toFixed(1)} M km`} />
-            <Row k="light delay" v={`${t.one_way_light_delay_min} min`} />
+            <Row k="from Earth" v={distanceFromEarth(t.distance_to_earth_km)} />
+            <Row k="light delay" v={lightDelay(t.one_way_light_delay_s)} />
           </dl>
 
           <div className="space-y-2">
@@ -61,7 +64,7 @@ export function MissionCard({ m }: { m: MissionStatus }) {
                 <div className="mb-1 flex justify-between font-mono text-[11px] tabular">
                   <span className="text-faint">{name}</span>
                   <span className={s.margin_days_after_arrival < 0 ? "text-alarm" : "text-dim"}>
-                    {mass(s.remaining_kg)} · {s.margin_days_after_arrival >= 0 ? "+" : ""}{s.margin_days_after_arrival} d spare
+                    {mass(s.remaining_kg)} · {s.margin_days_after_arrival >= 0 ? "+" : ""}{s.margin_days_after_arrival} days spare
                   </span>
                 </div>
                 <Bar fraction={s.remaining_fraction} className={s.margin_days_after_arrival < 0 ? "bg-alarm" : "bg-ground/70"} />

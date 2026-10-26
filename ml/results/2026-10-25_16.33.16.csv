@@ -1,2 +1,0 @@
-run_id,chan_id,true_positives,false_positives,false_negatives,tp_sequences,fp_sequences,anom_scores,normalized_pred_error
-2026-10-25_16.33.16,F-2,1,0,0,"[[5640, 5709], [6060, 6129], [6760, 6899], [8300, 8369]]",[],"[{'start_idx': 5390, 'end_idx': 5459, 'score': 6.69535827306773}, {'start_idx': 5810, 'end_idx': 5879, 'score': 7.807717011202352}, {'start_idx': 6510, 'end_idx': 6579, 'score': 9.245600701192735}, {'start_idx': 6580, 'end_idx': 6649, 'score': 6.532390372846178}, {'start_idx': 8050, 'end_idx': 8119, 'score': 2.489130826234073}]",0.057404724009266966

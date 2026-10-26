@@ -38,7 +38,7 @@ export function OrbitDiagram({ destination }: Props) {
       <polyline points={transfer} fill="none" stroke="var(--color-auto)" strokeWidth={1.75} />
       <circle cx={c + scale(r1)} cy={c} r={3.5} fill="var(--color-ground)" />
       <circle cx={c - scale(r2)} cy={c} r={3.5} fill="var(--color-ink)" />
-      <text x={c + scale(r1) + 6} y={c + 12} className="fill-dim font-mono" fontSize={9}>{lunar ? "LEO" : "Earth"}</text>
+      <text x={c + scale(r1) + 6} y={c + 12} className="fill-dim font-mono" fontSize={9}>{lunar ? "Low Earth orbit" : "Earth"}</text>
       <text x={c - scale(r2) + 6} y={c + 12} className="fill-ink font-mono" fontSize={9}>{destination}</text>
     </svg>
   );

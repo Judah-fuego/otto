@@ -33,13 +33,24 @@ function place(labels: Label[], markers: Point[], size: number): Placed[] {
   return placed;
 }
 
-/** Top-down view of the inner solar system: the transfer flown so far, the ship, and the line home. */
+/** The transfer flown so far, the ship, and the line home. Lunar trips are drawn around Earth. */
 export function MissionMap({ t, size = 240 }: Props) {
   const c = size / 2;
   const r1 = t.orbits_au.earth;
   const r2 = t.orbits_au.destination;
-  const scale = (c - 22) / Math.max(r1, r2);
-  const xy = ([x, y]: Point): Point => [c + x * scale, c - y * scale];
+  const lunar = t.frame === "earth";
+  const outer = Math.max(r1, r2);
+  // A lunar Hohmann is so eccentric that a linear scale hides the whole coast on top of Earth.
+  // Square-root radius keeps the Moon orbit round and lets the path leave the parking orbit.
+  const reach = c - 22;
+  const radial = (r: number) => (lunar ? Math.sqrt(Math.max(r, 0) / outer) : r / outer) * reach;
+  const xy = ([x, y]: Point): Point => {
+    const r = Math.hypot(x, y);
+    const s = radial(r);
+    if (s === 0) return [c, c];
+    return [c + (s * x) / r, c - (s * y) / r];
+  };
+  const homeAtCenter = Math.hypot(t.positions_au.earth[0], t.positions_au.earth[1]) < 1e-8;
 
   const a = (r1 + r2) / 2;
   const e = (r2 - r1) / (r2 + r1);
@@ -58,9 +69,10 @@ export function MissionMap({ t, size = 240 }: Props) {
   const ship = xy(t.positions_au.ship);
   const earth = xy(t.positions_au.earth);
   const dest = xy(t.positions_au.destination);
+  const shipOnEarth = Math.hypot(ship[0] - earth[0], ship[1] - earth[1]) < 26;
   const labels = place(
     [
-      { text: t.mission, at: ship, className: "fill-ink", fontSize: 10 },
+      ...(shipOnEarth ? [] : [{ text: t.mission, at: ship, className: "fill-ink", fontSize: 10 }]),
       { text: "Earth", at: earth, className: "fill-dim", fontSize: 9 },
       { text: titleCase(t.destination), at: dest, className: "fill-dim", fontSize: 9 },
     ],
@@ -71,16 +83,16 @@ export function MissionMap({ t, size = 240 }: Props) {
   return (
     <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }} className="shrink-0" role="img"
       aria-label={`${t.mission} is ${Math.round(t.progress * 100)}% of the way to ${t.destination}`}>
-      <circle cx={c} cy={c} r={r1 * scale} fill="none" stroke="var(--color-ground)" strokeOpacity={0.35} strokeDasharray="2 3" />
-      <circle cx={c} cy={c} r={r2 * scale} fill="none" stroke="var(--color-dim)" strokeOpacity={0.35} />
-      <circle cx={c} cy={c} r={5} fill="var(--color-crew)" />
+      <circle cx={c} cy={c} r={radial(r1)} fill="none" stroke="var(--color-ground)" strokeOpacity={0.35} strokeDasharray="2 3" />
+      <circle cx={c} cy={c} r={radial(r2)} fill="none" stroke="var(--color-dim)" strokeOpacity={0.35} />
+      <circle cx={c} cy={c} r={5} fill={t.frame === "earth" ? "var(--color-ground)" : "var(--color-crew)"} />
 
       <polyline points={arc(shipAngle, Math.PI)} fill="none" stroke="var(--color-auto)" strokeOpacity={0.45} strokeWidth={1.25} strokeDasharray="3 3" />
       <polyline points={arc(0, shipAngle)} fill="none" stroke="var(--color-auto)" strokeWidth={2} />
 
       <line x1={ship[0]} y1={ship[1]} x2={earth[0]} y2={earth[1]} stroke="var(--color-ground)" strokeOpacity={0.6} strokeDasharray="1 3" />
 
-      <circle cx={earth[0]} cy={earth[1]} r={4} fill="var(--color-ground)" />
+      {!homeAtCenter && <circle cx={earth[0]} cy={earth[1]} r={4} fill="var(--color-ground)" />}
       <circle cx={dest[0]} cy={dest[1]} r={4} fill="var(--color-alarm)" fillOpacity={0.8} />
       <circle cx={ship[0]} cy={ship[1]} r={9} fill="var(--color-auto)" fillOpacity={0.18} className="heartbeat" style={{ transformOrigin: `${ship[0]}px ${ship[1]}px` }} />
       <circle cx={ship[0]} cy={ship[1]} r={3.5} fill="var(--color-ink)" />

@@ -4,7 +4,6 @@ torch>=2.2
 scikit-learn>=1.4
 matplotlib>=3.8
 skyfield>=1.49
-streamlit>=1.32
 python-dotenv>=1.0
 openai>=1.40
 certifi
